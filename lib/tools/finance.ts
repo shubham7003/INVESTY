@@ -23,6 +23,13 @@ export async function verifyTicker(ticker: string): Promise<boolean> {
     const price = toNumber(q?.regularMarketPrice);
     return Boolean(name && price !== null);
   } catch {
+    // Log the underlying error to help debug Yahoo failures
+    try {
+      // attempt to capture the error if available
+      throw new Error("verifyTicker: yahoo query failed");
+    } catch (e) {
+      console.error("VERIFY TICKER ERROR for", t, e);
+    }
     return false;
   }
 }
@@ -34,6 +41,13 @@ export async function getFinancials(ticker: string): Promise<FinancialSnapshot |
     const yf: any = await import("yahoo-finance2");
     const quoteFn = yf.quote ?? yf.default?.quote ?? yf.default ?? yf;
     const q: any = await quoteFn(t);
+
+    // If we couldn't get a price/name, treat as not found
+    const price = toNumber(q?.regularMarketPrice);
+    const name = q?.shortName ?? q?.longName;
+    if (!name || price === null) {
+      return null;
+    }
 
     let revenue: number | null = null;
     try {
@@ -48,19 +62,26 @@ export async function getFinancials(ticker: string): Promise<FinancialSnapshot |
       if (revenue === null) {
         revenue = toNumber(summary?.financialData?.totalRevenue);
       }
-    } catch {
-      // ignore quoteSummary failures
+    } catch (err) {
+      // Log summary errors but continue — summary is optional
+      console.warn("FINANCIALS quoteSummary failed for", t, err);
     }
 
     return {
       ticker: t,
-      price: toNumber(q?.regularMarketPrice),
+      price,
       marketCap: toNumber(q?.marketCap),
       peRatio: toNumber(q?.trailingPE),
       revenue,
       profitMargin: toNumber(q?.profitMargins),
     };
   } catch {
+    // Log the underlying error for diagnosis (cookie/crumb/network issues)
+    try {
+      throw new Error("getFinancials: yahoo query failed");
+    } catch (e) {
+      console.error("FINANCIALS ERROR for", t, e);
+    }
     return null;
   }
 }

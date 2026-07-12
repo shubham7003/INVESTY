@@ -1,5 +1,5 @@
 import { getModel } from "@/lib/llm/factory";
-import { getFinancials, verifyTicker } from "@/lib/tools/finance";
+import { getFinancials } from "@/lib/tools/finance";
 import { getNews } from "@/lib/tools/news";
 import { Decision, ResearchReport } from "@/types/agent";
 
@@ -26,19 +26,18 @@ export async function runResearchAgent(companyName: string): Promise<ResearchRep
     );
   }
 
-  // Step 1b: verify the ticker is real before doing anything else
-  const isValid = await verifyTicker(ticker);
-  if (!isValid) {
-    throw new InvalidCompanyException(
-      `"${companyName}" doesn't match any publicly traded company we could find.`
-    );
-  }
-
-  // Step 2: gather in parallel
+  // Step 2: gather financials (which also serves as verification) and news
   const [financials, news] = await Promise.all([
     getFinancials(ticker),
     getNews(companyName),
   ]);
+
+  // If we couldn't fetch financials, treat as invalid company
+  if (!financials) {
+    throw new InvalidCompanyException(
+      `"${companyName}" doesn't match any publicly traded company we could find.`
+    );
+  }
 
   // Step 3: decide
   const decisionPrompt = `You are an investment analyst. Based on this data, decide INVEST or PASS.
