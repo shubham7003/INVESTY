@@ -16,25 +16,7 @@ export default function Home() {
     if (!companyName.trim()) return;
     setError(null);
 
-    // Quick verify before running the full agent to save LLM calls
-    try {
-      const v = await fetch("/api/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyName }),
-      });
-      const vd = await v.json();
-      if (v.status === 422) {
-        setError(vd.message || "Please enter a valid company name.");
-        setPhase("idle");
-        return;
-      }
-      if (!v.ok) throw new Error(vd.error || "verify failed");
-    } catch (err) {
-      setError(String(err));
-      return;
-    }
-
+    // Directly run the full agent (skip pre-verify)
     setPhase("loading");
     setReport(null);
     try {
