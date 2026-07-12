@@ -1,57 +1,46 @@
 import { getModel } from "@/lib/llm/factory";
-import { getFinancials } from "@/lib/tools/finance";
+import { getFinancials, verifyTicker } from "@/lib/tools/finance";
 import { getNews } from "@/lib/tools/news";
 import { Decision, ResearchReport } from "@/types/agent";
 
-function buildFallbackDecision(companyName: string, financials: ResearchReport["financials"], news: ResearchReport["news"]): Decision {
-  const reasons: string[] = [];
-  const risks: string[] = ["Gemini model quota was unavailable, so this report used fallback heuristics."];
-  const hasProfitMargin = financials?.profitMargin !== null && financials?.profitMargin !== undefined;
-
-  if (hasProfitMargin) {
-    reasons.push(`Profit margin data is available at ${financials?.profitMargin}.`);
-  } else {
-    risks.push("Financial snapshot is incomplete.");
-  }
-
-  if (news.length > 0) {
-    reasons.push(`Collected ${news.length} recent news item${news.length === 1 ? "" : "s"}.`);
-  } else {
-    risks.push("No recent news items were returned.");
-  }
-
-  const investCandidate = hasProfitMargin && (financials?.profitMargin ?? 0) > 0 && news.length > 0;
-
-  return {
-    verdict: investCandidate ? "INVEST" : "PASS",
-    confidence: investCandidate ? 62 : 44,
-    summary: `${companyName} was analyzed with a fallback rule set because the Gemini request was rate-limited.`,
-    reasons: reasons.length > 0 ? reasons : ["Fallback analysis completed using available market data."],
-    risks,
-  };
-}
+export class InvalidCompanyException extends Error {}
 
 export async function runResearchAgent(companyName: string): Promise<ResearchReport> {
   const fast = getModel("fast");
   const reasoning = getModel("reasoning");
 
-  let validTicker: string | null = null;
+  // Step 1: resolve ticker
+  const resolveRes = await fast.invoke(
+    `What is the stock ticker symbol for "${companyName}"? Reply with ONLY the ticker, nothing else. If this is not a real, publicly traded company, reply "UNKNOWN".`
+  );
+  const rawContent = resolveRes?.content?.toString?.() ?? String(resolveRes ?? "");
+  console.log("RAW TICKER RESPONSE:", JSON.stringify(rawContent));
 
-  try {
-    const resolveRes = await fast.invoke(
-      `What is the stock ticker symbol for "${companyName}"? Reply with ONLY the ticker, nothing else. If unknown, reply "UNKNOWN".`
+  // Extract a ticker-like token (e.g. AAPL, BRK.B) from any model response
+  const m = rawContent.match(/([A-Z]{1,6}(?:\.[A-Z]{1,4})?)/);
+  const ticker = (m ? m[1] : rawContent.trim().toUpperCase().replace(/[^A-Z.]/g, "").slice(0, 6));
+
+  if (ticker === "UNKNOWN" || ticker.length > 6 || !/^[A-Z.]+$/.test(ticker)) {
+    throw new InvalidCompanyException(
+      `"${companyName}" doesn't look like a valid publicly traded company.`
     );
-    const ticker = resolveRes.content.toString().trim().toUpperCase();
-    validTicker = ticker !== "UNKNOWN" ? ticker : null;
-  } catch {
-    validTicker = null;
   }
 
+  // Step 1b: verify the ticker is real before doing anything else
+  const isValid = await verifyTicker(ticker);
+  if (!isValid) {
+    throw new InvalidCompanyException(
+      `"${companyName}" doesn't match any publicly traded company we could find.`
+    );
+  }
+
+  // Step 2: gather in parallel
   const [financials, news] = await Promise.all([
-    validTicker ? getFinancials(validTicker) : Promise.resolve(null),
+    getFinancials(ticker),
     getNews(companyName),
   ]);
 
+  // Step 3: decide
   const decisionPrompt = `You are an investment analyst. Based on this data, decide INVEST or PASS.
 
 Company: ${companyName}
@@ -67,19 +56,13 @@ Respond ONLY with valid JSON matching this shape, no markdown fences:
   "risks": ["risk1", "risk2", ...]
 }`;
 
-  let decision: Decision;
-
-  try {
-    const decisionRes = await reasoning.invoke(decisionPrompt);
-    const raw = decisionRes.content.toString().replace(/```json|```/g, "").trim();
-    decision = Decision.parse(JSON.parse(raw));
-  } catch {
-    decision = buildFallbackDecision(companyName, financials, news);
-  }
+  const decisionRes = await reasoning.invoke(decisionPrompt);
+  const raw = decisionRes.content.toString().replace(/```json|```/g, "").trim();
+  const decision: Decision = Decision.parse(JSON.parse(raw));
 
   return ResearchReport.parse({
     companyName,
-    ticker: validTicker,
+    ticker,
     financials,
     news,
     decision,
