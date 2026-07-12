@@ -22,14 +22,9 @@ export async function verifyTicker(ticker: string): Promise<boolean> {
     const name = q?.shortName ?? q?.longName;
     const price = toNumber(q?.regularMarketPrice);
     return Boolean(name && price !== null);
-  } catch {
-    // Log the underlying error to help debug Yahoo failures
-    try {
-      // attempt to capture the error if available
-      throw new Error("verifyTicker: yahoo query failed");
-    } catch (e) {
-      console.error("VERIFY TICKER ERROR for", t, e);
-    }
+  } catch (err) {
+    // Surface the real error from yahoo-finance2 for debugging
+    console.error("VERIFY TICKER ERROR for", t, err);
     return false;
   }
 }
@@ -75,13 +70,9 @@ export async function getFinancials(ticker: string): Promise<FinancialSnapshot |
       revenue,
       profitMargin: toNumber(q?.profitMargins),
     };
-  } catch {
-    // Log the underlying error for diagnosis (cookie/crumb/network issues)
-    try {
-      throw new Error("getFinancials: yahoo query failed");
-    } catch (e) {
-      console.error("FINANCIALS ERROR for", t, e);
-    }
+  } catch (err) {
+    // Log the genuine error for diagnosis (cookie/crumb/network issues)
+    console.error("FINANCIALS ERROR for", t, err);
     return null;
   }
 }
@@ -98,7 +89,8 @@ export async function searchTickerByName(name: string): Promise<string | null> {
     const first = Array.isArray(quotes) && quotes.length > 0 ? quotes[0] : null;
     const symbol = first?.symbol ?? first?.ticker ?? null;
     return symbol ? String(symbol).toUpperCase() : null;
-  } catch {
+  } catch (err) {
+    console.error("searchTickerByName ERROR for", q, err);
     return null;
   }
 }
