@@ -1,12 +1,9 @@
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { ChatGroq } from "@langchain/groq";
 
 export function getModel(role: "fast" | "reasoning") {
-  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GOOGLE_API_KEY;
-  const model = process.env.GOOGLE_GENERATIVE_AI_MODEL ?? "gemini-2.5-flash";
-
-  return new ChatGoogleGenerativeAI({
-    model,
-    apiKey,
+  return new ChatGroq({
+    model: role === "fast" ? "llama-3.1-8b-instant" : "llama-3.3-70b-versatile",
+    apiKey: process.env.GROQ_API_KEY,
     temperature: role === "reasoning" ? 0.3 : 0,
   });
 }

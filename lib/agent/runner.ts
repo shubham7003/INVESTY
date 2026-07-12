@@ -26,18 +26,14 @@ export async function runResearchAgent(companyName: string): Promise<ResearchRep
     );
   }
 
-  // Step 2: gather financials (which also serves as verification) and news
+  // Step 2: gather financials (best-effort) and news in parallel.
+  // Financials may be null if Yahoo Finance is rate-limited or flaky —
+  // that's OK, we don't reject the company for it since the LLM already
+  // validated the ticker looks real above.
   const [financials, news] = await Promise.all([
     getFinancials(ticker),
     getNews(companyName),
   ]);
-
-  // If we couldn't fetch financials, treat as invalid company
-  if (!financials) {
-    throw new InvalidCompanyException(
-      `"${companyName}" doesn't match any publicly traded company we could find.`
-    );
-  }
 
   // Step 3: decide
   const decisionPrompt = `You are an investment analyst. Based on this data, decide INVEST or PASS.

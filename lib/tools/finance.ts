@@ -1,3 +1,4 @@
+import yahooFinance from "yahoo-finance2";
 import type { FinancialSnapshot } from "@/types/agent";
 
 const toNumber = (v: any): number | null => {
@@ -12,85 +13,24 @@ const toNumber = (v: any): number | null => {
   return null;
 };
 
-export async function verifyTicker(ticker: string): Promise<boolean> {
-  const t = String(ticker || "").trim().toUpperCase();
-  if (!t) return false;
-  try {
-    const yf: any = await import("yahoo-finance2");
-    const quoteFn = yf.quote ?? yf.default?.quote ?? yf.default ?? yf;
-    const q: any = await quoteFn(t);
-    const name = q?.shortName ?? q?.longName;
-    const price = toNumber(q?.regularMarketPrice);
-    return Boolean(name && price !== null);
-  } catch (err) {
-    // Surface the real error from yahoo-finance2 for debugging
-    console.error("VERIFY TICKER ERROR for", t, err);
-    return false;
-  }
-}
-
 export async function getFinancials(ticker: string): Promise<FinancialSnapshot | null> {
   const t = String(ticker || "").trim().toUpperCase();
   if (!t) return null;
   try {
-    const yf: any = await import("yahoo-finance2");
-    const quoteFn = yf.quote ?? yf.default?.quote ?? yf.default ?? yf;
-    const q: any = await quoteFn(t);
-
-    // If we couldn't get a price/name, treat as not found
+    const q: any = await yahooFinance.quote(t); // cast to any — avoids strict type mismatches on optional fields
     const price = toNumber(q?.regularMarketPrice);
-    const name = q?.shortName ?? q?.longName;
-    if (!name || price === null) {
-      return null;
-    }
-
-    let revenue: number | null = null;
-    try {
-      const quoteSummaryFn = yf.quoteSummary ?? yf.default?.quoteSummary ?? yf.quoteSummary ?? yf.default;
-      const summary: any = await quoteSummaryFn(t, {
-        modules: ["incomeStatementHistory", "financialData"],
-      });
-      const ish = summary?.incomeStatementHistory?.incomeStatementHistory;
-      if (Array.isArray(ish) && ish.length > 0) {
-        revenue = toNumber(ish[0]?.totalRevenue);
-      }
-      if (revenue === null) {
-        revenue = toNumber(summary?.financialData?.totalRevenue);
-      }
-    } catch (err) {
-      // Log summary errors but continue — summary is optional
-      console.warn("FINANCIALS quoteSummary failed for", t, err);
-    }
+    if (price === null) return null;
 
     return {
       ticker: t,
       price,
       marketCap: toNumber(q?.marketCap),
       peRatio: toNumber(q?.trailingPE),
-      revenue,
-      profitMargin: toNumber(q?.profitMargins),
+      revenue: null,
+      profitMargin: toNumber(q?.profitMargins), // will just be null if not present — handled gracefully
     };
   } catch (err) {
-    // Log the genuine error for diagnosis (cookie/crumb/network issues)
-    console.error("FINANCIALS ERROR for", t, err);
-    return null;
-  }
-}
-
-export async function searchTickerByName(name: string): Promise<string | null> {
-  const q = String(name || "").trim();
-  if (!q) return null;
-  try {
-    const yf: any = await import("yahoo-finance2");
-    const searchFn = yf.search ?? yf.default?.search ?? yf.default ?? yf;
-    const res: any = await searchFn(q);
-    // response can be an array or an object with 'quotes'
-    const quotes = Array.isArray(res) ? res : res?.quotes ?? res?.ResultSet?.Result ?? null;
-    const first = Array.isArray(quotes) && quotes.length > 0 ? quotes[0] : null;
-    const symbol = first?.symbol ?? first?.ticker ?? null;
-    return symbol ? String(symbol).toUpperCase() : null;
-  } catch (err) {
-    console.error("searchTickerByName ERROR for", q, err);
+    console.error("FINANCIALS ERROR for", t, ":", err);
     return null;
   }
 }
