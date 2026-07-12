@@ -64,3 +64,20 @@ export async function getFinancials(ticker: string): Promise<FinancialSnapshot |
     return null;
   }
 }
+
+export async function searchTickerByName(name: string): Promise<string | null> {
+  const q = String(name || "").trim();
+  if (!q) return null;
+  try {
+    const yf: any = await import("yahoo-finance2");
+    const searchFn = yf.search ?? yf.default?.search ?? yf.default ?? yf;
+    const res: any = await searchFn(q);
+    // response can be an array or an object with 'quotes'
+    const quotes = Array.isArray(res) ? res : res?.quotes ?? res?.ResultSet?.Result ?? null;
+    const first = Array.isArray(quotes) && quotes.length > 0 ? quotes[0] : null;
+    const symbol = first?.symbol ?? first?.ticker ?? null;
+    return symbol ? String(symbol).toUpperCase() : null;
+  } catch {
+    return null;
+  }
+}
