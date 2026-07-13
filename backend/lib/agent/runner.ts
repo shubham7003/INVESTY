@@ -1,7 +1,7 @@
-import { getModel } from "@/lib/llm/factory";
-import { getFinancials } from "@/lib/tools/finance";
-import { getNews } from "@/lib/tools/news";
-import { Decision, ResearchReport } from "@/types/agent";
+import { getModel } from "../llm/factory";
+import { getFinancials } from "../tools/finance";
+import { getNews } from "../tools/news";
+import { Decision, ResearchReport } from "../../types/agent";
 
 export class InvalidCompanyException extends Error {}
 
@@ -9,14 +9,12 @@ export async function runResearchAgent(companyName: string): Promise<ResearchRep
   const fast = getModel("fast");
   const reasoning = getModel("reasoning");
 
-  // Step 1: resolve ticker
   const resolveRes = await fast.invoke(
     `What is the stock ticker symbol for "${companyName}"? Reply with ONLY the ticker, nothing else. If this is not a real, publicly traded company, reply "UNKNOWN".`
   );
   const rawContent = resolveRes?.content?.toString?.() ?? String(resolveRes ?? "");
   console.log("RAW TICKER RESPONSE:", JSON.stringify(rawContent));
 
-  // Extract a ticker-like token (e.g. AAPL, BRK.B) from any model response
   const m = rawContent.match(/([A-Z]{1,6}(?:\.[A-Z]{1,4})?)/);
   const ticker = (m ? m[1] : rawContent.trim().toUpperCase().replace(/[^A-Z.]/g, "").slice(0, 6));
 
@@ -26,16 +24,11 @@ export async function runResearchAgent(companyName: string): Promise<ResearchRep
     );
   }
 
-  // Step 2: gather financials (best-effort) and news in parallel.
-  // Financials may be null if Yahoo Finance is rate-limited or flaky —
-  // that's OK, we don't reject the company for it since the LLM already
-  // validated the ticker looks real above.
   const [financials, news] = await Promise.all([
     getFinancials(ticker),
     getNews(companyName),
   ]);
 
-  // Step 3: decide
   const decisionPrompt = `You are an investment analyst. Based on this data, decide INVEST or PASS.
 
 Company: ${companyName}

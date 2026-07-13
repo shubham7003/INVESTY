@@ -13,6 +13,39 @@ Investy is an AI-powered investment research agent. You give it a company name, 
 
 Built with Next.js, a LangChain.js-style agent pipeline, and Gemini 2.5 Flash.
 
+## Project structure
+
+The repository now has a split layout:
+
+```text
+frontend/
+	app/
+		page.tsx
+		layout.tsx
+		globals.css
+	components/
+		Header.tsx
+		ThemeToggle.tsx
+		ToastContainer.tsx
+	public/
+	package.json
+
+backend/
+	api/
+		research/route.ts
+		verify/route.ts
+	lib/
+		agent/runner.ts
+		llm/factory.ts
+		tools/finance.ts
+		tools/news.ts
+	types/
+		agent.ts
+	package.json
+```
+
+The original root app is still present, but the new `frontend/` and `backend/` folders mirror the same code in a cleaner split.
+
 ## How to run it
 
 **Requirements:** Node.js 18+

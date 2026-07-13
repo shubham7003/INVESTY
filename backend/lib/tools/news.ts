@@ -1,5 +1,5 @@
 import { tavily } from "@tavily/core";
-import { NewsItem } from "@/types/agent";
+import { NewsItem } from "../../types/agent";
 
 const client = tavily({ apiKey: process.env.TAVILY_API_KEY });
 
